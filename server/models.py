@@ -19,6 +19,7 @@ class User(db.Model):
             "name": self.name,
             "email": self.email,
             "phone_number": self.phone_number,
+            "password_hash": self.password_hash
         }
 
     def set_password(self, password):
