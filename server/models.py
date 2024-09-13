@@ -13,6 +13,15 @@ class User(db.Model):
     phone_number = db.Column(db.String(100), nullable=False,unique=True)
     password_hash = db.Column(db.String(128), nullable=False)
 
+    def to_dict(self):
+        return{
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "phone_number": self.phone_number,
+            "password_hash": self.password_hash
+        }
+
     def set_password(self, password):
         if self.validate_password(password):
             self.password_hash = generate_password_hash(password)
