@@ -5,8 +5,10 @@ from flask_restful import Api, Resource
 from flask_bcrypt import Bcrypt
 from config import get_config
 import jwt
+import re
+import datetime
 from functools import wraps
-from models import User
+from models import db, User
 
 app = Flask(__name__)
 app.config.from_object(get_config())
@@ -22,7 +24,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/')
 def index():
-    return 'Hello, this is an inventory by BARACK!'
+    return 'Hello, this is an inventory designed by BARACK!'
 
 @app.route('/auth/signup', methods=['POST'])
 def signup():
@@ -52,9 +54,27 @@ def signup():
         name=name,
         email=email,
         phone_number=phone_number,
-        password_hash=bcrypt.generate_password_hash(password).decode('utf-8')
+        password_hash=bcrypt.generate_password_hash(password_hash).decode('utf-8')
     )
     db.session.add(new_user)
     db.session.commit()
     return jsonify({'message': 'User created successfully'}), 201
 
+@app.route('/auth/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email')
+    password_hash = data.get('password_hash')
+
+    user = User.query.filter_by(email=email).first()
+    if user and bcrypt.check_password_hash(user.password_hash, password_hash):
+        token = jwt.encode({
+            'user_id': user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        })
+        return jsonify({'access_token': token, 'name': user.name, 'id': user.id})
+    
+    return jsonify({'message': 'Invalid credentials'}), 401
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5555)
