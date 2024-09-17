@@ -12,6 +12,7 @@ from models import db, User
 
 app = Flask(__name__)
 app.config.from_object(get_config())
+app.config['SECRET_KEY'] = 'HS256' 
 
 #initialize extentions
 db.init_app(app)
@@ -48,7 +49,6 @@ def signup():
     if not password_pattern.match(password_hash):
         return jsonify({'message': 'Password must be at least 8 characters long and contain both letters and numbers.'}), 400
 
-    
     #create user
     new_user = User(
         name=name,
@@ -66,13 +66,19 @@ def login():
     email = data.get('email')
     password_hash = data.get('password_hash')
 
+    # Check if user exists and password is correct
     user = User.query.filter_by(email=email).first()
     if user and bcrypt.check_password_hash(user.password_hash, password_hash):
         token = jwt.encode({
             'user_id': user.id,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
-        })
-        return jsonify({'access_token': token, 'name': user.name, 'id': user.id})
+        }, app.config['SECRET_KEY'], algorithm='HS256')
+
+        return jsonify({
+            'access_token': token,
+            'name': user.name,
+            'id': user.id
+        }), 200
     
     return jsonify({'message': 'Invalid credentials'}), 401
 
