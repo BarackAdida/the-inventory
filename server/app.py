@@ -8,7 +8,7 @@ import jwt
 import re
 import datetime
 from functools import wraps
-from models import db, User
+from models import db, User, Product
 
 app = Flask(__name__)
 app.config.from_object(get_config())
@@ -58,7 +58,7 @@ def signup():
     )
     db.session.add(new_user)
     db.session.commit()
-    return jsonify({'message': 'User created successfully'}), 201
+    return jsonify({'message': 'Your account has been created successfully🎉🎉'}), 201
 
 @app.route('/auth/login', methods=['POST'])
 def login():
@@ -82,5 +82,66 @@ def login():
     
     return jsonify({'message': 'Invalid credentials'}), 401
 
+class ProductResource(Resource):
+    def post(self, product_id):
+        data = request.get_json()
+        new_product = Product(
+            name = data['name'],
+            sku = data['sku'],
+            description = data['description'],
+            price = data['price'],
+            quantity_in_stock = data['quantity_in_stock'],
+            suppliers = data['supplier']
+        )
+        db.session.add(new_product)
+        db.session.commit()
+        return jsonify({'message': 'Product added successfully👍'}), 201
+    
+    def get(self, product_id):
+        product = Product.query.get(product_id)
+        if product:
+            return jsonify({
+                'name': product.name,
+                'sku': product.sku,
+                'description': product.description,
+                'price': product.price,
+                'quantity_in_stock': product.quantity_in_stock,
+                'suppliers': product.suppliers
+                }), 200
+        return jsonify({'message': 'Product not found😒'}), 404
+    
+    def patch(self, product_id):
+        product = Product.query.get(product_id)
+        if product is None:
+            return jsonify({'message': 'Product to be edited not found😒'}), 404
+        
+        data = request.get_json()
+        if 'name' in data:
+            product.name = data['name']
+        if 'sku' in data:
+            product.sku = data['sku']
+        if 'description' in data:
+            product.description = data['description']
+        if 'price' in data:
+            product.price = data['price']
+        if 'quantity_in_stock' in data:
+            product.quantity_in_stock = data['quantity_in_stock']
+        if 'supplier' in data:
+            product.supplier = data['supplier']
+
+        db.session.commit()
+        return jsonify({'message': 'Product updated successfully👍'}), 200
+    
+    def delete(self, product_id):
+        product = Product.query.get(product_id)
+        if product:
+            db.session.delete(product)
+            db.session.commit()
+            return jsonify({'message': 'Product deleted successfully👍'}), 200
+        
+        return jsonify({'message': 'Product to be deleted not found😒'}), 404
+    
+api.add_resource(ProductResource, '/products' '/products/<int:product_id>')
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5555)
