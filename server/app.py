@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from sqlalchemy import event
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
@@ -207,9 +208,9 @@ class ReceiptResource(Resource):
     @event.listens_for(Sales, 'after_insert')
     def create_receipt(mapper, connection, target):
         new_receipt = Receipt(
-            'sale_id': target.id,
-            'total_amount': target.total_price,
-            'date_of_receipt': datetime.now(),
+            sale_id = target.id,
+            total_amount = target.total_price,
+            date_of_receipt = datetime.now()
         )
         db.session.add(new_receipt)
         db.session.commit()
