@@ -76,6 +76,11 @@ class Product(db.Model):
     suppliers = db.relationship('Supplier', secondary=product_supplier, back_populates='products')
 
     stock_transactions = db.relationship('StockTransaction', backref='product', lazy=True)
+    sales = db.relationship('Sale', backref='product', lazy=True)
+
+    def get_current_quantity_in_stock(self):
+        total_quantity_sold = sum(sale.quantity_sold for sale in self.sales)
+        return self.quantity_in_stock - total_quantity_sold
 
     def to_dict(self):
         return {
@@ -102,7 +107,7 @@ class Supplier(db.Model):
             "contact": self.contact
         }
 
-class Sale(db.Model):
+class Sales(db.Model):
     __tablename__ = "sales"
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
@@ -151,6 +156,8 @@ class Receipt(db.Model):
     total_amount = db.Column(db.Float, nullable=False)
     date_of_receipt = db.Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    sale = db.relationship('Sales', backref='receipt')
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -172,7 +179,7 @@ class StockSummary(db.Model):
     def update_stock_values(self):
         product = Product.query.get(self.product_id)
         self.total_stock_value = product.quantity_in_stock * product.price
-        total_sold = db.session.query(db.func.sum(Sale.total_price)).filter_by(product_id=self.product_id).scalar() or 0
+        total_sold = db.session.query(db.func.sum(Sales.total_price)).filter_by(product_id=self.product_id).scalar() or 0
         self.total_sold_value = total_sold
         self.total_unsold_value = self.total_stock_value - self.total_sold_value
         db.session.commit()

@@ -8,7 +8,7 @@ import jwt
 import re
 import datetime
 from functools import wraps
-from models import db, User, Product
+from models import db, User, Product, Supplier, Sales, Receipt
 
 app = Flask(__name__)
 app.config.from_object(get_config())
@@ -141,7 +141,82 @@ class ProductResource(Resource):
         
         return jsonify({'message': 'Product to be deleted not found😒'}), 404
     
+class SupplierResource(Resource):
+    def get(self, supplier_id):
+        supplier = Supplier.query.get(supplier_id)
+        if supplier:
+            return jsonify({
+                'name': supplier.name,
+                'contact': supplier.contact,
+                }), 200
+        return jsonify({'message': 'Supplier not found😒'}), 404
+    
+    def post(self):
+        data = request.get_json()
+        new_supplier = Supplier(name=data['name'], contact=data['contact'])
+        db.session.add(new_supplier)
+        db.session.commit()
+        return jsonify({'message': 'Supplier created successfully👍'}), 201
+    
+    def delete(self, supplier_id):
+        supplier = Supplier.query.get(supplier_id)
+        if supplier:
+            db.session.delete(supplier)
+            db.session.commit()
+            return jsonify({'message': 'Supplier deleted successfully👍'}), 200
+        return jsonify({'message': 'Supplier to be deleted not found😒'}), 404
+    
+class SaleResource(Resource):
+    def get(self, sale_id):
+        sale = Sales.query.get(sale_id)
+        if sale:
+            return jsonify({
+                'product_id': sale.product_id,
+                'name': sale.name,
+                'quantity_sold': sale.quantity_sold,
+                'total_price': sale.total_price,
+                'date_of_sale': sale.date_of_sale,
+                'receipt_id': sale.receipt_id,
+                }), 200
+        return jsonify({'message': 'Sale not found😒'}), 404
+    
+    def post(self):
+        data = request.get_json()
+        new_sale = Sales(product_id=data['product_id'],
+        name=data['name'], 
+        quantity_sold=data['quantity_sold'],
+        total_price=data['total_price'],
+        date_of_sale=data['date_of_sale'],
+        receipt_id=data['receipt_id']
+        )
+        db.session.add(new_sale)
+        db.session.commit()
+        return jsonify({'message': 'Sale created successfully👍'}), 201
+    
+class ReceiptResource(Resource):
+    def get(self, receipt_id):
+        receipt = Receipt.query.get(receipt_id)
+        if receipt:
+            return jsonify({
+                'sale_id': receipt.sale_id,
+                'total_amount': receipt.total_amount,
+                'date_of_receipt': receipt.date_of_receipt,
+            }), 200
+        return jsonify({'message': 'Receipt not found😒'})
+    
+    @event.listens_for(Sales, 'after_insert')
+    def create_receipt(mapper, connection, target):
+        new_receipt = Receipt(
+            'sale_id': target.id,
+            'total_amount': target.total_price,
+            'date_of_receipt': datetime.now(),
+        )
+        db.session.add(new_receipt)
+        db.session.commit()
+    
 api.add_resource(ProductResource, '/products' '/products/<int:product_id>')
+api.add_resource(SupplierResource, '/suppliers', '/suppliers/<int:supplier_id>')
+api.add_resource(SaleResource, '/sales', '/sales/<int:sale_id>')
     
 if __name__ == '__main__':
     app.run(debug=True, port=5555)
