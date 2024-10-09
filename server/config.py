@@ -1,28 +1,25 @@
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class Config:
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URI', 'sqlite:///inventorydb.db') 
+    """Base configuration."""
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # SECRET_KEY = os.getenv('SECRET_KEY', 'your_secret_key')
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'your_default_secret_key')
+    # Add other configurations as needed
+
 
 class DevelopmentConfig(Config):
-    DEBUG = True
+    """Development configuration."""
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///Inventory.db')
 
-class TestingConfig(Config):
-    TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.getenv('TEST_DATABASE_URI', 'sqlite:///inventorydb.db')
 
 class ProductionConfig(Config):
-    DEBUG = False
+    """Production configuration."""
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///Inventory.db')
+
 
 def get_config():
-    env = os.getenv('FLASK_ENV', 'development')
+    """Return the configuration based on the environment."""
+    env = os.environ.get('FLASK_ENV', 'development')
     if env == 'production':
         return ProductionConfig
-    elif env == 'testing':
-        return TestingConfig
-    else:
-        return DevelopmentConfig
+    return DevelopmentConfig

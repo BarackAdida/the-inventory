@@ -1,27 +1,27 @@
+import os
 from flask import Flask, request, jsonify
-from sqlalchemy import event
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_bcrypt import Bcrypt
 from config import get_config
+from models import db, User, Product, Supplier, Sales, Receipt, StockSummary
 import jwt
 import re
 import datetime
 from functools import wraps
-from models import db, User, Product, Supplier, Sales, Receipt, StockSummary
 
 app = Flask(__name__)
 app.config.from_object(get_config())
-app.config['SECRET_KEY'] = 'HS256' 
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_default_secret_key') 
 
-#initialize extentions
+# Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
 api = Api(app)
 bcrypt = Bcrypt(app)
 
-#initialize CORS with specific origin
+# Initialize CORS with specific origin
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/')
@@ -36,21 +36,21 @@ def signup():
     phone_number = data.get('phone_number')
     password_hash = data.get('password_hash')
 
-    #validate data 
+    # Validate data 
     if not name or not email or not phone_number or not password_hash:
-        return jsonify({'message': 'name, email,phone_number and password are required!'}), 400
+        return jsonify({'message': 'name, email, phone_number and password are required!'}), 400
 
     if User.query.filter_by(name=name).first():
         return jsonify({'message': 'name already exists!'}), 400
 
     if User.query.filter_by(email=email).first():
-        return jsonify({'message': "Email already exits"}), 400
+        return jsonify({'message': "Email already exists"}), 400
 
     password_pattern = re.compile(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$')
     if not password_pattern.match(password_hash):
         return jsonify({'message': 'Password must be at least 8 characters long and contain both letters and numbers.'}), 400
 
-    #create user
+    # Create user
     new_user = User(
         name=name,
         email=email,
@@ -84,15 +84,15 @@ def login():
     return jsonify({'message': 'Invalid credentials'}), 401
 
 class ProductResource(Resource):
-    def post(self, product_id):
+    def post(self):
         data = request.get_json()
         new_product = Product(
-            name = data['name'],
-            sku = data['sku'],
-            description = data['description'],
-            price = data['price'],
-            quantity_in_stock = data['quantity_in_stock'],
-            suppliers = data['supplier']
+            name=data['name'],
+            sku=data['sku'],
+            description=data['description'],
+            price=data['price'],
+            quantity_in_stock=data['quantity_in_stock'],
+            supplier_id=data.get('supplier_id')  # Ensure to match the correct attribute
         )
         db.session.add(new_product)
         db.session.commit()
@@ -107,8 +107,8 @@ class ProductResource(Resource):
                 'description': product.description,
                 'price': product.price,
                 'quantity_in_stock': product.quantity_in_stock,
-                'suppliers': product.suppliers
-                }), 200
+                'supplier_id': product.supplier_id  # Match the correct attribute
+            }), 200
         return jsonify({'message': 'Product not found😒'}), 404
     
     def patch(self, product_id):
@@ -127,8 +127,8 @@ class ProductResource(Resource):
             product.price = data['price']
         if 'quantity_in_stock' in data:
             product.quantity_in_stock = data['quantity_in_stock']
-        if 'supplier' in data:
-            product.supplier = data['supplier']
+        if 'supplier_id' in data:
+            product.supplier_id = data['supplier_id']  # Update the supplier reference
 
         db.session.commit()
         return jsonify({'message': 'Product updated successfully👍'}), 200
@@ -149,7 +149,7 @@ class SupplierResource(Resource):
             return jsonify({
                 'name': supplier.name,
                 'contact': supplier.contact,
-                }), 200
+            }), 200
         return jsonify({'message': 'Supplier not found😒'}), 404
     
     def post(self):
@@ -168,6 +168,50 @@ class SupplierResource(Resource):
         return jsonify({'message': 'Supplier to be deleted not found😒'}), 404
     
 class SaleResource(Resource):
+    def post(self):
+        data = request.get_json()
+        product = Product.query.get(data['product_id'])
+        
+        if not product:
+            return jsonify({'message': 'Product not found😒'}), 404
+        
+        if product.quantity_in_stock < data['quantity_sold']:
+            return jsonify({'message': 'Insufficient stock available😒'}), 400
+        
+        # Create a new sale
+        new_sale = Sales(
+            product_id=data['product_id'],
+            name=product.name,
+            quantity_sold=data['quantity_sold'],
+            total_price=product.price * data['quantity_sold']
+        )
+        
+        db.session.add(new_sale)
+        
+        # Update stock
+        product.quantity_in_stock -= data['quantity_sold']
+        
+        # Create/update receipt
+        receipt = Receipt(total_amount=new_sale.total_price)
+        db.session.add(receipt)
+        
+        # Update stock summary
+        stock_summary = StockSummary.query.filter_by(product_id=data['product_id']).first()
+        if stock_summary:
+            stock_summary.total_stock_value -= product.price * data['quantity_sold']
+            stock_summary.total_sold_value += new_sale.total_price
+        else:
+            stock_summary = StockSummary(
+                product_id=data['product_id'],
+                total_stock_value=-1 * product.price * data['quantity_sold'],
+                total_sold_value=new_sale.total_price,
+                total_unsold_value=product.price * product.quantity_in_stock
+            )
+            db.session.add(stock_summary)
+
+        db.session.commit()
+        return jsonify({'message': 'Sale recorded successfully! 🎉', 'sale_id': new_sale.id}), 201
+    
     def get(self, sale_id):
         sale = Sales.query.get(sale_id)
         if sale:
@@ -178,59 +222,14 @@ class SaleResource(Resource):
                 'total_price': sale.total_price,
                 'date_of_sale': sale.date_of_sale,
                 'receipt_id': sale.receipt_id,
-                }), 200
-        return jsonify({'message': 'Sale not found😒'}), 404
-    
-    def post(self):
-        data = request.get_json()
-        new_sale = Sales(product_id=data['product_id'],
-        name=data['name'], 
-        quantity_sold=data['quantity_sold'],
-        total_price=data['total_price'],
-        date_of_sale=data['date_of_sale'],
-        receipt_id=data['receipt_id']
-        )
-        db.session.add(new_sale)
-        db.session.commit()
-        return jsonify({'message': 'Sale created successfully👍'}), 201
-    
-class ReceiptResource(Resource):
-    def get(self, receipt_id):
-        receipt = Receipt.query.get(receipt_id)
-        if receipt:
-            return jsonify({
-                'sale_id': receipt.sale_id,
-                'total_amount': receipt.total_amount,
-                'date_of_receipt': receipt.date_of_receipt,
             }), 200
-        return jsonify({'message': 'Receipt not found😒'})
-    
-    @event.listens_for(Sales, 'after_insert')
-    def create_receipt(mapper, connection, target):
-        new_receipt = Receipt(
-            sale_id = target.id,
-            total_amount = target.total_price,
-            date_of_receipt = datetime.now()
-        )
-        db.session.add(new_receipt)
-        db.session.commit()
+        return jsonify({'message': 'Sale not found😒'}), 404
 
-class StockSummaryResource(Resource):
-    def get(self):
-        stock_summary = db.session.query(Stock).all()
-        return jsonify({
-            'product_id': stock_summary.product_id,
-            'total_stock_value': stock_summary.total_stock_value,
-            'total_sold_value': stock_summary.total_sold_value,
-            'total_unsold_value': stock_summary.total_unsold_value,
-        }), 200
 
-        return jsonify({'message': 'Invalid search😒'})
-    
-api.add_resource(ProductResource, '/products' '/products/<int:product_id>')
+# Add the resources to the API
+api.add_resource(ProductResource, '/products', '/products/<int:product_id>')
 api.add_resource(SupplierResource, '/suppliers', '/suppliers/<int:supplier_id>')
 api.add_resource(SaleResource, '/sales', '/sales/<int:sale_id>')
-api.add_resource(ReceiptResource, '/receipts', '/receipts/<int:receipt_id>')
-    
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5555)
+    app.run(debug=True)
