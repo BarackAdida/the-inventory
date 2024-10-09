@@ -9,7 +9,7 @@ import jwt
 import re
 import datetime
 from functools import wraps
-from models import db, User, Product, Supplier, Sales, Receipt
+from models import db, User, Product, Supplier, Sales, Receipt, StockSummary
 
 app = Flask(__name__)
 app.config.from_object(get_config())
@@ -214,10 +214,23 @@ class ReceiptResource(Resource):
         )
         db.session.add(new_receipt)
         db.session.commit()
+
+class StockSummaryResource(Resource):
+    def get(self):
+        stock_summary = db.session.query(Stock).all()
+        return jsonify({
+            'product_id': stock_summary.product_id,
+            'total_stock_value': stock_summary.total_stock_value,
+            'total_sold_value': stock_summary.total_sold_value,
+            'total_unsold_value': stock_summary.total_unsold_value,
+        }), 200
+
+        return jsonify({'message': 'Invalid search😒'})
     
 api.add_resource(ProductResource, '/products' '/products/<int:product_id>')
 api.add_resource(SupplierResource, '/suppliers', '/suppliers/<int:supplier_id>')
 api.add_resource(SaleResource, '/sales', '/sales/<int:sale_id>')
+api.add_resource(ReceiptResource, '/receipts', '/receipts/<int:receipt_id>')
     
 if __name__ == '__main__':
     app.run(debug=True, port=5555)
